@@ -18,8 +18,8 @@ enum trace_item_type {
 
 struct trace_item {
 	unsigned char type;			// see above
-	unsigned char sReg_a;			// 1st operand
-	unsigned char sReg_b;			// 2nd operand
+	unsigned char sReg_a;		// 1st operand
+	unsigned char sReg_b;		// 2nd operand
 	unsigned char dReg;			// dest. operand
 	unsigned int PC;			// program counter
 	unsigned int Addr;			// mem. address
@@ -34,8 +34,7 @@ static int trace_buf_ptr;
 static int trace_buf_end;
 static struct trace_item *trace_buf;
 
-int is_big_endian(void)
-{
+int is_big_endian(void) {
 	union {
 		uint32_t i;
 		char c[4];
@@ -44,14 +43,12 @@ int is_big_endian(void)
 	return bint.c[0] == 1;
 }
 
-uint32_t my_ntohl(uint32_t x)
-{
+uint32_t my_ntohl(uint32_t x) {
 	u_char *s = (u_char *)&x;
 	return (uint32_t)(s[3] << 24 | s[2] << 16 | s[1] << 8 | s[0]);
 }
 
-void trace_init()
-{
+void trace_init() {
 	trace_buf = malloc(sizeof(struct trace_item) * TRACE_BUFSIZE);
 
 	if (!trace_buf) {
@@ -63,14 +60,12 @@ void trace_init()
 	trace_buf_end = 0;
 }
 
-void trace_uninit()
-{
+void trace_uninit() {
 	free(trace_buf);
 	fclose(trace_fd);
 }
 
-int trace_get_item(struct trace_item **item)
-{
+int trace_get_item(struct trace_item **item) {
 	int n_items;
 
 	if (trace_buf_ptr == trace_buf_end) {	/* if no more unprocessed items in the trace buffer, get new data  */
