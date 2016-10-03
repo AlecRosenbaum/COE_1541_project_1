@@ -5,9 +5,6 @@
 	 ./pipeline	/afs/cs.pitt.edu/courses/1541/short_traces/sample.tr	0	
 ***************************************************************/
 
-#include <stdio.h>
-#include <inttypes.h>
-#include <arpa/inet.h>
 #include "CPU.h" 
 
 int main(int argc, char **argv) {

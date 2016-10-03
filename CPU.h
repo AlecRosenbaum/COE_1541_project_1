@@ -2,6 +2,11 @@
 #ifndef TRACE_ITEM_H
 #define TRACE_ITEM_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <arpa/inet.h>
+
 // this is tpts
 enum trace_item_type {
 	ti_NOP = 0,
