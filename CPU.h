@@ -6,11 +6,14 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <arpa/inet.h>
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
+#include <stdbool.h>
 
 // this is tpts
 enum trace_item_type {
 	ti_NOP = 0,
-
 	ti_RTYPE,
 	ti_ITYPE,
 	ti_LOAD,
@@ -18,7 +21,8 @@ enum trace_item_type {
 	ti_BRANCH,
 	ti_JTYPE,
 	ti_SPECIAL,
-	ti_JRTYPE
+	ti_JRTYPE,
+	ti_DONE
 };
 
 struct trace_item {
