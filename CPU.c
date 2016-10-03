@@ -23,15 +23,15 @@ void handler(int sig) {
 int main(int argc, char **argv) {
 	signal(SIGSEGV, handler);   // install our handler
 
-	struct trace_item *tr_entry;
-	struct trace_item *tr_WB;
-	struct trace_item *tr_MEM2;
-	struct trace_item *tr_MEM1;
-	struct trace_item *tr_EX2;
-	struct trace_item *tr_EX1;
-	struct trace_item *tr_ID;
-	struct trace_item *tr_IF2;
-	struct trace_item *tr_IF1;
+	struct trace_item *tr_entry = NULL;
+	struct trace_item *tr_WB = NULL;
+	struct trace_item *tr_MEM2 = NULL;
+	struct trace_item *tr_MEM1 = NULL;
+	struct trace_item *tr_EX2 = NULL;
+	struct trace_item *tr_EX1 = NULL;
+	struct trace_item *tr_ID = NULL;
+	struct trace_item *tr_IF2 = NULL;
+	struct trace_item *tr_IF1 = NULL;
 	size_t size;
 	bool stall = false;
 	char *trace_file_name;
@@ -70,43 +70,45 @@ int main(int argc, char **argv) {
 	size = trace_get_item(&tr_entry);
 
 	while(1) {
-		
+		// increment cycle count
+		cycle_number++;
+
 		// exit, print if trace is on
-		if (trace_view_on) {
+		if (trace_view_on && *tr_WB != NULL) {
 			switch(tr_WB->type) {
 				case ti_NOP:
-					printf("[cycle %d] NOP:",cycle_number) ;
+					printf("[cycle %d] NOP:\n",cycle_number) ;
 					break;
 				case ti_RTYPE:
 					printf("[cycle %d] RTYPE:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(dReg: %d) \n", tr_entry->PC, tr_entry->sReg_a, tr_entry->sReg_b, tr_entry->dReg);
+					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(dReg: %d) \n", tr_WB->PC, tr_WB->sReg_a, tr_WB->sReg_b, tr_WB->dReg);
 					break;
 				case ti_ITYPE:
 					printf("[cycle %d] ITYPE:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->dReg, tr_entry->Addr);
+					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->dReg, tr_WB->Addr);
 					break;
 				case ti_LOAD:
 					printf("[cycle %d] LOAD:",cycle_number) ;			
-					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->dReg, tr_entry->Addr);
+					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->dReg, tr_WB->Addr);
 					break;
 				case ti_STORE:
 					printf("[cycle %d] STORE:",cycle_number) ;			
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->sReg_b, tr_entry->Addr);
+					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->sReg_b, tr_WB->Addr);
 					break;
 				case ti_BRANCH:
 					printf("[cycle %d] BRANCH:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->sReg_b, tr_entry->Addr);
+					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->sReg_b, tr_WB->Addr);
 					break;
 				case ti_JTYPE:
 					printf("[cycle %d] JTYPE:",cycle_number) ;
-					printf(" (PC: %x)(addr: %x)\n", tr_entry->PC,tr_entry->Addr);
+					printf(" (PC: %x)(addr: %x)\n", tr_WB->PC,tr_WB->Addr);
 					break;
 				case ti_SPECIAL:
 					printf("[cycle %d] SPECIAL:",cycle_number) ;				
 					break;
 				case ti_JRTYPE:
 					printf("[cycle %d] JRTYPE:",cycle_number) ;
-					printf(" (PC: %x) (sReg_a: %d)(addr: %x)\n", tr_entry->PC, tr_entry->dReg, tr_entry->Addr);
+					printf(" (PC: %x) (sReg_a: %d)(addr: %x)\n", tr_WB->PC, tr_WB->dReg, tr_WB->Addr);
 					break;
 			}
 		}
@@ -124,6 +126,41 @@ int main(int argc, char **argv) {
 		tr_EX2 = tr_EX1;
 
 		// EX1
+		/* Data hazard: a
+			If an instruction in EX1 will write into a register X while the
+			instruction in ID is reading from register X, then the instruction
+			in ID (and subsequent instructions) should stall for one cycle to
+			allow forwarding of the result from EX2/MEM1 to ID/EX1 (in the
+			following cycle). A no-op is injected in EX1/EX2.
+		*/
+		// something will be in EX1, and the destination registers are the same
+		if (cycle_number >= 4 && tr_EX1->dReg == tr_ID->dReg) {
+			// check that instruction writes to a register
+			switch(tr_EX1->type) {
+				case ti_RTYPE:
+				case ti_ITYPE:
+				case ti_LOAD:
+					tr_EX1->type = ti_NOP;
+					continue;
+			}
+		}
+
+		/* Structural hazards: 
+			if the instruction at WB is trying to write into the register file
+			while the instruction at ID is trying to read form the register
+			file, priority is given to the instruction at WB. The instructions
+			at IF1, IF2 and ID are stalled for one cycle while the instruction
+			at WB is using the register file.
+		*/
+		if (cycle_number >= 8) {
+			switch(tr_WB->type) {
+				case ti_RTYPE:
+				case ti_ITYPE:
+				case ti_LOAD:
+					tr_EX1->type = ti_NOP;
+					continue;
+			}
+		}
 		tr_EX1 = tr_ID;
 
 		// ID
@@ -154,52 +191,7 @@ int main(int argc, char **argv) {
 			t_dReg = tr_entry->dReg;
 			t_PC = tr_entry->PC;
 			t_Addr = tr_entry->Addr;
-		}	
-
-		// SIMULATION OF A SINGLE CYCLE cpu IS TRIVIAL - EACH INSTRUCTION IS EXECUTED
-		// IN ONE CYCLE
-
-		if (trace_view_on) { /* print the executed instruction if trace_view_on=1 */
-			switch(tr_entry->type) {
-				case ti_NOP:
-					printf("[cycle %d] NOP:",cycle_number) ;
-					break;
-				case ti_RTYPE:
-					printf("[cycle %d] RTYPE:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(dReg: %d) \n", tr_entry->PC, tr_entry->sReg_a, tr_entry->sReg_b, tr_entry->dReg);
-					break;
-				case ti_ITYPE:
-					printf("[cycle %d] ITYPE:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->dReg, tr_entry->Addr);
-					break;
-				case ti_LOAD:
-					printf("[cycle %d] LOAD:",cycle_number) ;			
-					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->dReg, tr_entry->Addr);
-					break;
-				case ti_STORE:
-					printf("[cycle %d] STORE:",cycle_number) ;			
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->sReg_b, tr_entry->Addr);
-					break;
-				case ti_BRANCH:
-					printf("[cycle %d] BRANCH:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_entry->PC, tr_entry->sReg_a, tr_entry->sReg_b, tr_entry->Addr);
-					break;
-				case ti_JTYPE:
-					printf("[cycle %d] JTYPE:",cycle_number) ;
-					printf(" (PC: %x)(addr: %x)\n", tr_entry->PC,tr_entry->Addr);
-					break;
-				case ti_SPECIAL:
-					printf("[cycle %d] SPECIAL:",cycle_number) ;				
-					break;
-				case ti_JRTYPE:
-					printf("[cycle %d] JRTYPE:",cycle_number) ;
-					printf(" (PC: %x) (sReg_a: %d)(addr: %x)\n", tr_entry->PC, tr_entry->dReg, tr_entry->Addr);
-					break;
-			}
 		}
-		
-		// increment cycle count
-		cycle_number++;
 	}
 
 	trace_uninit();
