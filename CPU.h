@@ -5,10 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#include <arpa/inet.h>
-#include <execinfo.h>
-#include <signal.h>
-#include <unistd.h>
+// #include <arpa/inet.h>
+#include <winsock2.h>
+// #include <execinfo.h>
+// #include <signal.h>
+// #include <unistd.h>
 #include <stdbool.h>
 
 // this is tpts
@@ -22,7 +23,8 @@ enum trace_item_type {
 	ti_JTYPE,
 	ti_SPECIAL,
 	ti_JRTYPE,
-	ti_DONE
+	ti_DONE,
+	ti_SQUASHED
 };
 
 struct trace_item {
@@ -94,4 +96,49 @@ int trace_get_item(struct trace_item **item) {
 	}
 
 	return 1;
+}
+
+void print_cycle(struct trace_item *item, int cycle_number) {
+	switch(item->type) {
+		case ti_NOP:
+			printf("[cycle %d] NOP:\n",cycle_number) ;
+			break;
+		case ti_RTYPE:
+			printf("[cycle %d] RTYPE:",cycle_number) ;
+			printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(dReg: %d) \n", item->PC, item->sReg_a, item->sReg_b, item->dReg);
+			break;
+		case ti_ITYPE:
+			printf("[cycle %d] ITYPE:",cycle_number) ;
+			printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", item->PC, item->sReg_a, item->dReg, item->Addr);
+			break;
+		case ti_LOAD:
+			printf("[cycle %d] LOAD:",cycle_number) ;			
+			printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", item->PC, item->sReg_a, item->dReg, item->Addr);
+			break;
+		case ti_STORE:
+			printf("[cycle %d] STORE:",cycle_number) ;			
+			printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", item->PC, item->sReg_a, item->sReg_b, item->Addr);
+			break;
+		case ti_BRANCH:
+			printf("[cycle %d] BRANCH:",cycle_number) ;
+			printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", item->PC, item->sReg_a, item->sReg_b, item->Addr);
+			break;
+		case ti_JTYPE:
+			printf("[cycle %d] JTYPE:",cycle_number) ;
+			printf(" (PC: %x)(addr: %x)\n", item->PC,item->Addr);
+			break;
+		case ti_SPECIAL:
+			printf("[cycle %d] SPECIAL:",cycle_number) ;				
+			break;
+		case ti_JRTYPE:
+			printf("[cycle %d] JRTYPE:",cycle_number) ;
+			printf(" (PC: %x) (sReg_a: %d)(addr: %x)\n", item->PC, item->dReg, item->Addr);
+			break;
+		case ti_DONE:
+			printf("[cycle %d] DONE:\n",cycle_number) ;
+			break;
+		case ti_SQUASHED:
+			printf("[cycle %d] SQUASHED:\n",cycle_number) ;
+			break;
+	}
 }

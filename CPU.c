@@ -7,22 +7,7 @@
 
 #include "CPU.h" 
 
-void handler(int sig) {
-  void *array[10];
-  size_t size;
-
-  // get void*'s for all entries on the stack
-  size = backtrace(array, 10);
-
-  // print out all the frames to stderr
-  fprintf(stderr, "Error: signal %d:\n", sig);
-  backtrace_symbols_fd(array, size, STDERR_FILENO);
-  exit(1);
-}
-
 int main(int argc, char **argv) {
-	signal(SIGSEGV, handler);   // install our handler
-
 	struct trace_item *tr_entry = NULL;
 	struct trace_item *tr_WB = NULL;
 	struct trace_item *tr_MEM2 = NULL;
@@ -32,10 +17,20 @@ int main(int argc, char **argv) {
 	struct trace_item *tr_ID = NULL;
 	struct trace_item *tr_IF2 = NULL;
 	struct trace_item *tr_IF1 = NULL;
+	
+	// some custom instructions so we don't overwrite existing ones
+	struct trace_item *NO_OP;
+	NO_OP = malloc(sizeof(struct trace_item));
+	NO_OP->type = ti_NOP;
+	struct trace_item *DONE;
+	DONE = malloc(sizeof(struct trace_item));
+	DONE->type = ti_DONE;
+	
 	size_t size;
 	bool stall = false;
 	char *trace_file_name;
 	int trace_view_on = 0;
+	int branch_prediction_method = 0;
 	
 	unsigned char t_type = 0;
 	unsigned char t_sReg_a= 0;
@@ -47,13 +42,17 @@ int main(int argc, char **argv) {
 	unsigned int cycle_number = 1;
 
 	if (argc == 1) {
-		fprintf(stdout, "\nUSAGE: tv <trace_file> <switch - any character>\n");
-		fprintf(stdout, "\n(switch) to turn on or off individual item view.\n\n");
+		fprintf(stdout, "\nUSAGE: <trace_file> <branch_prediction_method (default 0)> <trace_view_switch (default off)>\n");
+		fprintf(stdout, "\n(branch_prediction_method)\n\t0- not taken\n\t1- 1-bit branch-predictor\n\t2- 2-bit branch predictor\n\n");
+		fprintf(stdout, "\n(trace_view_switch)\n\t1- enable trace view\n\t2- disable trace view.\n\n");
 		exit(0);
 	}
 		
 	trace_file_name = argv[1];
-	if (argc == 3) trace_view_on = atoi(argv[2]) ;
+	if (argc >= 3) branch_prediction_method = atoi(argv[2]);
+	if (argc == 4) trace_view_on = atoi(argv[3]);
+
+	printf("branch_prediction_method: %d\ntrace_view: %d\nargc: %d\n", branch_prediction_method, trace_view_on, argc);
 
 	fprintf(stdout, "\n ** opening file %s\n", trace_file_name);
 
@@ -74,43 +73,47 @@ int main(int argc, char **argv) {
 		cycle_number++;
 
 		// exit, print if trace is on
-		if (trace_view_on && *tr_WB != NULL) {
-			switch(tr_WB->type) {
-				case ti_NOP:
-					printf("[cycle %d] NOP:\n",cycle_number) ;
-					break;
-				case ti_RTYPE:
-					printf("[cycle %d] RTYPE:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(dReg: %d) \n", tr_WB->PC, tr_WB->sReg_a, tr_WB->sReg_b, tr_WB->dReg);
-					break;
-				case ti_ITYPE:
-					printf("[cycle %d] ITYPE:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->dReg, tr_WB->Addr);
-					break;
-				case ti_LOAD:
-					printf("[cycle %d] LOAD:",cycle_number) ;			
-					printf(" (PC: %x)(sReg_a: %d)(dReg: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->dReg, tr_WB->Addr);
-					break;
-				case ti_STORE:
-					printf("[cycle %d] STORE:",cycle_number) ;			
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->sReg_b, tr_WB->Addr);
-					break;
-				case ti_BRANCH:
-					printf("[cycle %d] BRANCH:",cycle_number) ;
-					printf(" (PC: %x)(sReg_a: %d)(sReg_b: %d)(addr: %x)\n", tr_WB->PC, tr_WB->sReg_a, tr_WB->sReg_b, tr_WB->Addr);
-					break;
-				case ti_JTYPE:
-					printf("[cycle %d] JTYPE:",cycle_number) ;
-					printf(" (PC: %x)(addr: %x)\n", tr_WB->PC,tr_WB->Addr);
-					break;
-				case ti_SPECIAL:
-					printf("[cycle %d] SPECIAL:",cycle_number) ;				
-					break;
-				case ti_JRTYPE:
-					printf("[cycle %d] JRTYPE:",cycle_number) ;
-					printf(" (PC: %x) (sReg_a: %d)(addr: %x)\n", tr_WB->PC, tr_WB->dReg, tr_WB->Addr);
-					break;
+		if (trace_view_on) {
+			if (tr_WB != NULL) {
+				// printf("%s\n", "exit");
+				print_cycle(tr_WB, cycle_number);
 			}
+			// if (tr_MEM2 != NULL) {
+			// 	printf("%s\n", "tr_WB");
+			// 	print_cycle(tr_MEM2, cycle_number);
+			// }
+			// if (tr_MEM1 != NULL) {
+			// 	printf("%s\n", "tr_MEM2");
+			// 	print_cycle(tr_MEM1, cycle_number);
+			// }
+			// if (tr_EX2 != NULL) {
+			// 	printf("%s\n", "tr_MEM1");
+			// 	print_cycle(tr_EX2, cycle_number);
+			// }
+			// if (tr_EX1 != NULL) {
+			// 	printf("%s\n", "tr_EX2");
+			// 	print_cycle(tr_EX1, cycle_number);
+			// }
+			// if (tr_ID != NULL) {
+			// 	printf("%s\n", "tr_EX1");
+			// 	print_cycle(tr_ID, cycle_number);
+			// }
+			// if (tr_IF2 != NULL) {
+			// 	printf("%s\n", "tr_ID");
+			// 	print_cycle(tr_IF2, cycle_number);
+			// }
+			// if (tr_IF1 != NULL) {
+			// 	printf("%s\n", "tr_IF2");
+			// 	print_cycle(tr_IF1, cycle_number);
+			// }
+			// if (tr_entry != NULL) {
+			// 	printf("%s\n", "tr_IF1");
+			// 	print_cycle(tr_entry, cycle_number);
+			// }
+		}
+		if (!size && tr_WB->type == ti_DONE) {	 /* no more instructions (trace_items) to simulate */
+			printf("+ Simulation terminates at cycle : %u\n", cycle_number);
+			break;
 		}
 
 		// WB
@@ -134,30 +137,63 @@ int main(int argc, char **argv) {
 			following cycle). A no-op is injected in EX1/EX2.
 		*/
 		// something will be in EX1, and the destination registers are the same
-		if (cycle_number >= 4 && tr_EX1->dReg == tr_ID->dReg) {
+		if (tr_EX1 != NULL && (tr_EX1->dReg == tr_ID->sReg_a || tr_EX1->dReg == tr_ID->sReg_b)) {
 			// check that instruction writes to a register
 			switch(tr_EX1->type) {
 				case ti_RTYPE:
 				case ti_ITYPE:
 				case ti_LOAD:
-					tr_EX1->type = ti_NOP;
+					tr_EX1 = NO_OP;
 					continue;
+			}
+		}
+		/* Data hazard: b
+			If an instruction in EX2 is a load instruction which will write
+			into a register X while the instruction in ID is reading from
+			register X, then the instruction in ID (and subsequent
+			instructions) should stall since it does not have the correct
+			content of register X. A no-op is injected in EX1/EX2.
+		*/
+		// what was in EX2 has already moved into MEM1, so test that stage
+		if (tr_MEM1 != NULL) {
+			if(tr_MEM1->type == ti_LOAD) {
+				if( tr_MEM1->dReg == tr_ID->sReg_a || tr_MEM1->dReg == tr_ID->sReg_b) {
+					tr_EX1 = NO_OP;
+					continue;
+				}
+			}
+		}
+
+		/* Data hazard: c
+		If an instruction in MEM1 is a load instruction which will write into a
+		register X while the instruction in ID is reading from register X, then
+		the instruction in ID (and subsequent instructions) should stall to 
+		allow forwarding of the result from MEM2/WB to ID/EX1 (in the following
+		cycle). A no-op is injected in EX1/EX2.
+		*/
+		// what was in MEM1 has already moved into MEM2, so test that stage
+		if (tr_MEM2 != NULL) {
+			if(tr_MEM2->type == ti_LOAD) {
+				if( tr_MEM2->dReg == tr_ID->sReg_a || tr_MEM2->dReg == tr_ID->sReg_b) {
+					tr_EX1 = NO_OP;
+					continue;
+				}
 			}
 		}
 
 		/* Structural hazards: 
 			if the instruction at WB is trying to write into the register file
-			while the instruction at ID is trying to read form the register
+			while the instruction at ID is trying to read from the register
 			file, priority is given to the instruction at WB. The instructions
 			at IF1, IF2 and ID are stalled for one cycle while the instruction
 			at WB is using the register file.
 		*/
-		if (cycle_number >= 8) {
+		if (tr_WB != NULL && tr_ID != DONE) {
 			switch(tr_WB->type) {
 				case ti_RTYPE:
 				case ti_ITYPE:
 				case ti_LOAD:
-					tr_EX1->type = ti_NOP;
+					tr_EX1 = NO_OP;
 					continue;
 			}
 		}
@@ -168,33 +204,65 @@ int main(int argc, char **argv) {
 
 		// IF2
 		tr_IF2 = tr_IF1;
+		// determine if a branch in IF1 is taken, store result into dReg
+		if (tr_IF1 != NULL && tr_IF1->type == ti_BRANCH) {
+			if (tr_IF1->PC + 4 == tr_entry->PC) {
+				// branch not taken
+				tr_IF1->dReg = 0;
+			} else {
+				// branch taken
+				tr_IF1->dReg = 1;
+			}
+		}
+
+		// if ex2-if1 are branch
+		if (tr_EX2 != NULL && tr_EX2->type == ti_BRANCH ) {
+			// determine if branch was taken
+
+			switch(branch_prediction_method) {
+				
+			}
+
+			// prediction: not taken
+			if(branch_prediction_method == 0) {
+				printf("branch_prediction_method = 0!\n");
+				// if branch was taken
+				// if (/* condition */) {
+				// 	// insert no-op at entry point
+				// }
+				// otherwise it's fine
+			}
+			// prediction: 1-bit branch-predictor
+			if(branch_prediction_method == 1) {
+				printf("branch_prediction_method = 1!\n");
+			}
+			// prediction: 2-bit branch-predictor
+			if(branch_prediction_method == 2) {
+				printf("branch_prediction_method = 2!\n");
+			}
+		}
 
 		// IF1
 		tr_IF1 = tr_entry;
 
+
 		// get new entry
 		if(!stall) {
+			// if there is nothing left to read, trace_get_item doesn't
+			// overwrite tr_entry, so we give it a default DONE value
+			tr_entry = DONE;
 			if (size) {
 				size = trace_get_item(&tr_entry);
-			} else {
-				tr_entry->type = ti_DONE;
 			}
 		}
 
-		if (!size && tr_WB->type == ti_DONE) {	 /* no more instructions (trace_items) to simulate */
-			printf("+ Simulation terminates at cycle : %u\n", cycle_number);
-			break;
-		} else {	/* parse the next instruction to simulate */
-			t_type = tr_entry->type;
-			t_sReg_a = tr_entry->sReg_a;
-			t_sReg_b = tr_entry->sReg_b;
-			t_dReg = tr_entry->dReg;
-			t_PC = tr_entry->PC;
-			t_Addr = tr_entry->Addr;
-		}
+
 	}
 
 	trace_uninit();
+
+	free(NO_OP);
+	free(DONE);
 
 	exit(0);
 }
