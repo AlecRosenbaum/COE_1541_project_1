@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
 	SQUASHED = malloc(sizeof(struct trace_item));
 	SQUASHED->type = ti_SQUASHED;
 	
+	// allocate buffers, initialize to NO_OP
 	struct trace_item *tr_entry = NO_OP;
 	struct trace_item *tr_WB = NO_OP;
 	struct trace_item *tr_MEM2 = NO_OP;
@@ -29,48 +30,47 @@ int main(int argc, char **argv) {
 	struct trace_item *tr_IF2 = NO_OP;
 	struct trace_item *tr_IF1 = NO_OP;
 	
+	// declare and define some control-variables
 	size_t size;
-	bool stall = false;
 	char *trace_file_name;
 	int trace_view_on = 0;
 	int branch_prediction_method = 0;
-	
-	unsigned char t_type = 0;
-	unsigned char t_sReg_a= 0;
-	unsigned char t_sReg_b= 0;
-	unsigned char t_dReg= 0;
-	unsigned int t_PC = 0;
-	unsigned int t_Addr = 0;
-
 	unsigned int cycle_number = 1;
+	unsigned int idx;
+	unsigned char prediction;
 
+	// allocate prediction hash table, initialize all values to zero
+	struct branch_predictor_item *branch_predict_table;
+	branch_predict_table = malloc(sizeof(struct branch_predictor_item) * BRANCH_PREDICT_TABLE_SIZE);
+	for (int i = 0; i < BRANCH_PREDICT_TABLE_SIZE; i++) {
+		branch_predict_table[i].tag = 0;
+		branch_predict_table[i].prediction = 0;
+	}
+
+	// read arguments
 	if (argc == 1) {
 		fprintf(stdout, "\nUSAGE: <trace_file> <branch_prediction_method (default 0)> <trace_view_switch (default off)>\n");
 		fprintf(stdout, "\n(branch_prediction_method)\n\t0- not taken\n\t1- 1-bit branch-predictor\n\t2- 2-bit branch predictor\n\n");
 		fprintf(stdout, "\n(trace_view_switch)\n\t1- enable trace view\n\t2- disable trace view.\n\n");
 		exit(0);
 	}
-		
 	trace_file_name = argv[1];
 	if (argc >= 3) branch_prediction_method = atoi(argv[2]);
 	if (argc == 4) trace_view_on = atoi(argv[3]);
 
-	printf("branch_prediction_method: %d\ntrace_view: %d\nargc: %d\n", branch_prediction_method, trace_view_on, argc);
-
+	// setup trace file reading
 	fprintf(stdout, "\n ** opening file %s\n", trace_file_name);
-
 	trace_fd = fopen(trace_file_name, "rb");
-
 	if (!trace_fd) {
 		fprintf(stdout, "\ntrace file %s not opened.\n\n", trace_file_name);
 		exit(0);
 	}
-
 	trace_init();
 
 	// assuming trace will have valid first instruction
 	size = trace_get_item(&tr_entry);
 
+	// main simulation loop
 	while(1) {
 		// increment cycle count
 		cycle_number++;
@@ -117,6 +117,7 @@ int main(int argc, char **argv) {
 					continue;
 			}
 		}
+
 		/* Data hazard: b
 			If an instruction in EX2 is a load instruction which will write
 			into a register X while the instruction in ID is reading from
@@ -192,7 +193,7 @@ int main(int argc, char **argv) {
 		if (tr_EX2 != NULL && tr_EX2->type == ti_BRANCH ) {
 			// determine if branch was taken
 			switch(branch_prediction_method) {
-				case 0:
+				case 0: // prediction: branch not taken
 					printf("branch_prediction_method = 0!\n");
 					if (tr_EX2->dReg == 1) {
 						// add no-op to front, start next cycle
@@ -200,14 +201,87 @@ int main(int argc, char **argv) {
 						continue;
 					}
 					break;
-				case 1:
-					// prediction: 1-bit branch-predictor
-					// TODO
+				case 1: // prediction: 1-bit branch-predictor
+					printf("before branch update\n");
+					print_branch_table(branch_predict_table);
+					// determine prediction
+					idx = get_hash(tr_EX2->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_EX2->PC) {
+						// prediction is stored in table
+						prediction = branch_predict_table[idx].prediction;
+					}
+
+					// update predictor table
+					branch_predict_table[idx].tag = tr_EX2->PC;
+					branch_predict_table[idx].prediction = tr_EX2->dReg;
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_EX2->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+
 					printf("branch_prediction_method = 1!\n");
 					break;
-				case 2:
-					// prediction: 2-bit branch-predictor 
-					// TODO
+				case 2: // prediction: 2-bit branch-predictor 
+					// determine prediction
+					print_branch_table(branch_predict_table);
+					idx = get_hash(tr_EX2->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_EX2->PC) {
+						// prediction is stored in table
+						switch (branch_predict_table[idx].prediction) {
+							case 0: // 00
+							case 1: // 01
+								prediction = 0;
+								break;
+							case 2: // 10
+							case 3: // 11
+								prediction = 1;
+								break;
+						}
+					}
+
+					// update predictor table
+					branch_predict_table[idx].tag = tr_EX2->PC;
+					if(tr_EX2->dReg == 1) { // taken
+						switch(branch_predict_table[idx].prediction) {
+							case 0: // 00
+								branch_predict_table[idx].prediction = 1; //01
+								break;
+							case 1: // 01
+								branch_predict_table[idx].prediction = 3; //11
+								break;
+							case 2: // 10
+								branch_predict_table[idx].prediction = 3; //11
+								break;
+							case 3: // 11
+								branch_predict_table[idx].prediction = 3; //11
+								break;
+						}
+					} else { // not taken
+						switch(branch_predict_table[idx].prediction) {
+							case 0: // 00
+								branch_predict_table[idx].prediction = 0; //00
+								break;
+							case 1: // 01
+								branch_predict_table[idx].prediction = 0; //00
+								break;
+							case 2: // 10
+								branch_predict_table[idx].prediction = 0; //00
+								break;
+							case 3: // 11
+								branch_predict_table[idx].prediction = 2; //10
+								break;
+						}
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_EX2->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
 					printf("branch_prediction_method = 2!\n");
 					break;
 			}
@@ -225,14 +299,45 @@ int main(int argc, char **argv) {
 						continue;
 					}
 					break;
-				case 1:
-					// prediction: 1-bit branch-predictor
-					// TODO
+				case 1: // prediction: 1-bit branch-predictor
+					// determine prediction
+					idx = get_hash(tr_EX1->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_EX1->PC) {
+						// prediction is stored in table
+						prediction = branch_predict_table[idx].prediction;
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_EX1->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
 					printf("branch_prediction_method = 1!\n");
 					break;
-				case 2:
-					// prediction: 2-bit branch-predictor 
-					// TODO
+				case 2: // prediction: 2-bit branch-predictor 
+					// determine prediction
+					idx = get_hash(tr_EX1->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_EX1->PC) {
+						// prediction is stored in table
+						switch (branch_predict_table[idx].prediction) {
+							case 0: // 00
+							case 1: // 01
+								prediction = 0;
+								break;
+							case 2: // 10
+							case 3: // 11
+								prediction = 1;
+								break;
+						}
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_EX1->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
 					printf("branch_prediction_method = 2!\n");
 					break;
 			}
@@ -250,14 +355,46 @@ int main(int argc, char **argv) {
 						continue;
 					}
 					break;
-				case 1:
-					// prediction: 1-bit branch-predictor
-					// TODO
+				case 1: // prediction: 1-bit branch-predictor
+					// determine prediction
+					idx = get_hash(tr_ID->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_ID->PC) {
+						// prediction is stored in table
+						prediction = branch_predict_table[idx].prediction;
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_ID->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+
 					printf("branch_prediction_method = 1!\n");
 					break;
-				case 2:
-					// prediction: 2-bit branch-predictor 
-					// TODO
+				case 2: // prediction: 2-bit branch-predictor 
+					// determine prediction
+					idx = get_hash(tr_ID->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_ID->PC) {
+						// prediction is stored in table
+						switch (branch_predict_table[idx].prediction) {
+							case 0: // 00
+							case 1: // 01
+								prediction = 0;
+								break;
+							case 2: // 10
+							case 3: // 11
+								prediction = 1;
+								break;
+						}
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_ID->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
 					printf("branch_prediction_method = 2!\n");
 					break;
 			}
@@ -275,14 +412,46 @@ int main(int argc, char **argv) {
 						continue;
 					}
 					break;
-				case 1:
-					// prediction: 1-bit branch-predictor
-					// TODO
+				case 1: // prediction: 1-bit branch-predictor
+					// determine prediction
+					idx = get_hash(tr_IF2->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_IF2->PC) {
+						// prediction is stored in table
+						prediction = branch_predict_table[idx].prediction;
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_IF2->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+
 					printf("branch_prediction_method = 1!\n");
 					break;
-				case 2:
-					// prediction: 2-bit branch-predictor 
-					// TODO
+				case 2: // prediction: 2-bit branch-predictor 
+					// determine prediction
+					idx = get_hash(tr_IF2->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_IF2->PC) {
+						// prediction is stored in table
+						switch (branch_predict_table[idx].prediction) {
+							case 0: // 00
+							case 1: // 01
+								prediction = 0;
+								break;
+							case 2: // 10
+							case 3: // 11
+								prediction = 1;
+								break;
+						}
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_IF2->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
 					printf("branch_prediction_method = 2!\n");
 					break;
 			}
@@ -300,56 +469,67 @@ int main(int argc, char **argv) {
 						continue;
 					}
 					break;
-				case 1:
-					// prediction: 1-bit branch-predictor
-					// TODO
+				case 1: // prediction: 1-bit branch-predictor
+					// determine prediction
+					idx = get_hash(tr_IF1->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_IF1->PC) {
+						// prediction is stored in table
+						prediction = branch_predict_table[idx].prediction;
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_IF1->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
 					printf("branch_prediction_method = 1!\n");
 					break;
-				case 2:
-					// prediction: 2-bit branch-predictor 
-					// TODO
+				case 2: // prediction: 2-bit branch-predictor 
+					// determine prediction
+					idx = get_hash(tr_IF1->PC);
+					prediction = 0; // default to not-taken
+					if (branch_predict_table[idx].tag == tr_IF1->PC) {
+						// prediction is stored in table
+						switch (branch_predict_table[idx].prediction) {
+							case 0: // 00
+							case 1: // 01
+								prediction = 0;
+								break;
+							case 2: // 10
+							case 3: // 11
+								prediction = 1;
+								break;
+						}
+					}
+
+					// if prediction doesn't match reality, add no-ops
+					if (prediction != tr_IF1->dReg) {
+						tr_IF1 = SQUASHED;
+						continue;
+					}
 					printf("branch_prediction_method = 2!\n");
 					break;
 			}
 		}
 
-			// // prediction: not taken
-			// if(branch_prediction_method == 0) {
-			// 	// if branch was taken
-			// 	// if (/* condition */) {
-			// 	// 	// insert no-op at entry point
-			// 	// }
-			// 	// otherwise it's fine
-			// }
-			// // prediction: 1-bit branch-predictor
-			// if(branch_prediction_method == 1) {
-			// 	printf("branch_prediction_method = 1!\n");
-			// }
-			// if(branch_prediction_method == 2) {
-			// 	printf("branch_prediction_method = 2!\n");
-			// }
-
 		// IF1
 		tr_IF1 = tr_entry;
 
 
-		// get new entry
-		if(!stall) {
-			// if there is nothing left to read, trace_get_item doesn't
-			// overwrite tr_entry, so we give it a default DONE value
-			tr_entry = DONE;
-			if (size) {
-				size = trace_get_item(&tr_entry);
-			}
+		// if there is nothing left to read, trace_get_item doesn't
+		// overwrite tr_entry, so we give it a default DONE value
+		tr_entry = DONE;
+		if (size) {
+			size = trace_get_item(&tr_entry);
 		}
-
-
 	}
 
 	trace_uninit();
 
 	free(NO_OP);
 	free(DONE);
+	free(SQUASHED);
 
 	exit(0);
 }

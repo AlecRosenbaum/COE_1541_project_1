@@ -7,10 +7,8 @@
 #include <inttypes.h>
 // #include <arpa/inet.h>
 #include <winsock2.h>
-// #include <execinfo.h>
-// #include <signal.h>
-// #include <unistd.h>
 #include <stdbool.h>
+
 
 // this is tpts
 enum trace_item_type {
@@ -36,9 +34,15 @@ struct trace_item {
 	unsigned int Addr;			// mem. address
 };
 
+struct branch_predictor_item {
+	unsigned int tag;			// the instruction address
+	unsigned char prediction;	// predictor (can be 1 or two bit depending on usage)
+};
+
 #endif
 
 #define TRACE_BUFSIZE 1024*1024
+#define BRANCH_PREDICT_TABLE_SIZE 64
 
 static FILE *trace_fd;
 static int trace_buf_ptr;
@@ -189,4 +193,40 @@ void print_pipeline(struct trace_item *entry,
 	printf("PC   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   |\n", entry->PC, IF1->PC, IF2->PC, ID->PC, EX1->PC, EX2->PC, MEM1->PC, MEM2->PC, WB->PC);
 	printf("Addr | %8x | %8x | %8x | %8x | %8x | %8x | %8x | %8x | %8x |\n", entry->Addr, IF1->Addr, IF2->Addr, ID->Addr, EX1->Addr, EX2->Addr, MEM1->Addr, MEM2->Addr, WB->Addr);
 	printf("      ---------- ---------- ---------- ---------- ---------- ---------- ---------- ---------- ----------\n");
+}
+
+void print_branch_table(struct branch_predictor_item *table){
+	int entries = 4;
+	
+	for (int i = 0; i < BRANCH_PREDICT_TABLE_SIZE; i+=BRANCH_PREDICT_TABLE_SIZE/entries) {
+		printf("| idx | tag      | prediction ");
+	}
+	printf("\n");
+	for (int i = 0; i < BRANCH_PREDICT_TABLE_SIZE; i+=BRANCH_PREDICT_TABLE_SIZE/entries) {
+		printf("|-----|----------|------------");
+	}
+	printf("\n");
+
+	for (int i = 0; i < BRANCH_PREDICT_TABLE_SIZE/entries; i++) {
+		for (int j = 0; j < BRANCH_PREDICT_TABLE_SIZE; j+=BRANCH_PREDICT_TABLE_SIZE/entries) {
+			printf("| %3d | %8x | %10d ", i+j, table[i+j].tag, table[i+j].prediction);
+		}
+		printf("\n");
+	}
+
+	for (int i = 0; i < BRANCH_PREDICT_TABLE_SIZE; i+=BRANCH_PREDICT_TABLE_SIZE/entries) {
+		printf(" -----------------------------");
+	}
+	printf("\n");
+}
+
+// implements the hash function, returns hashed value (bits 9-4 of address)
+unsigned int get_hash(unsigned int addr) {
+	// get bits 9-0 (512 = 2^9)
+	addr = addr%512;
+
+	// bits 9-4 returned as an unisnged integer
+	addr = addr >> 4;
+
+	return addr;
 }
