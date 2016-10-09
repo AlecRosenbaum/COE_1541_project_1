@@ -142,3 +142,51 @@ void print_cycle(struct trace_item *item, int cycle_number) {
 			break;
 	}
 }
+
+char* get_trace_item_type(struct trace_item *item) {
+	switch(item->type) {
+		case ti_NOP:
+			return "NOP     ";
+		case ti_RTYPE:
+			return "RTYPE   ";
+		case ti_ITYPE:
+			return "ITYPE   ";
+		case ti_LOAD:
+			return "LOAD    ";
+		case ti_STORE:
+			return "STORE   ";
+		case ti_BRANCH:
+			return "BRANCH  ";
+		case ti_JTYPE:
+			return "JTYPE   ";
+		case ti_SPECIAL:
+			return "SPECIAL ";	
+		case ti_JRTYPE:
+			return "JRTYPE  ";
+		case ti_DONE:
+			return "DONE    ";
+		case ti_SQUASHED:
+			return "SQUASHED";
+	}
+}
+
+void print_pipeline(struct trace_item *entry, 
+					struct trace_item *IF1,
+					struct trace_item *IF2,
+					struct trace_item *ID,
+					struct trace_item *EX1,
+					struct trace_item *EX2,
+					struct trace_item *MEM1,
+					struct trace_item *MEM2,
+					struct trace_item *WB,
+					int cycle_number) {
+	printf("cycle ---------- ---------- ---------- ---------- ---------- ---------- ---------- ---------- ----------\n");
+	printf("%5d|   entry  |   IF1    |   IF2    |    ID    |   EX1    |   EX2    |   MEM1   |   MEM2   |    WB    |\n", cycle_number);
+	printf("type | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", get_trace_item_type(entry), get_trace_item_type(IF1), get_trace_item_type(IF2), get_trace_item_type(ID), get_trace_item_type(EX1), get_trace_item_type(EX2), get_trace_item_type(MEM1), get_trace_item_type(MEM2), get_trace_item_type(WB));
+	printf("aReg |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |\n", entry->sReg_a, IF1->sReg_a, IF2->sReg_a, ID->sReg_a, EX1->sReg_a, EX2->sReg_a, MEM1->sReg_a, MEM2->sReg_a, WB->sReg_a);
+	printf("bReg |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |\n", entry->sReg_b, IF1->sReg_b, IF2->sReg_b, ID->sReg_b, EX1->sReg_b, EX2->sReg_b, MEM1->sReg_b, MEM2->sReg_b, WB->sReg_b);
+	printf("dReg |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |    %3d   |\n", entry->dReg, IF1->dReg, IF2->dReg, ID->dReg, EX1->dReg, EX2->dReg, MEM1->dReg, MEM2->dReg, WB->dReg);
+	printf("PC   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   | %6x   |\n", entry->PC, IF1->PC, IF2->PC, ID->PC, EX1->PC, EX2->PC, MEM1->PC, MEM2->PC, WB->PC);
+	printf("Addr | %8x | %8x | %8x | %8x | %8x | %8x | %8x | %8x | %8x |\n", entry->Addr, IF1->Addr, IF2->Addr, ID->Addr, EX1->Addr, EX2->Addr, MEM1->Addr, MEM2->Addr, WB->Addr);
+	printf("      ---------- ---------- ---------- ---------- ---------- ---------- ---------- ---------- ----------\n");
+}

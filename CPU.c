@@ -8,16 +8,6 @@
 #include "CPU.h" 
 
 int main(int argc, char **argv) {
-	struct trace_item *tr_entry = NULL;
-	struct trace_item *tr_WB = NULL;
-	struct trace_item *tr_MEM2 = NULL;
-	struct trace_item *tr_MEM1 = NULL;
-	struct trace_item *tr_EX2 = NULL;
-	struct trace_item *tr_EX1 = NULL;
-	struct trace_item *tr_ID = NULL;
-	struct trace_item *tr_IF2 = NULL;
-	struct trace_item *tr_IF1 = NULL;
-	
 	// some custom instructions so we don't overwrite existing ones
 	struct trace_item *NO_OP;
 	NO_OP = malloc(sizeof(struct trace_item));
@@ -25,6 +15,19 @@ int main(int argc, char **argv) {
 	struct trace_item *DONE;
 	DONE = malloc(sizeof(struct trace_item));
 	DONE->type = ti_DONE;
+	struct trace_item *SQUASHED;
+	SQUASHED = malloc(sizeof(struct trace_item));
+	SQUASHED->type = ti_SQUASHED;
+	
+	struct trace_item *tr_entry = NO_OP;
+	struct trace_item *tr_WB = NO_OP;
+	struct trace_item *tr_MEM2 = NO_OP;
+	struct trace_item *tr_MEM1 = NO_OP;
+	struct trace_item *tr_EX2 = NO_OP;
+	struct trace_item *tr_EX1 = NO_OP;
+	struct trace_item *tr_ID = NO_OP;
+	struct trace_item *tr_IF2 = NO_OP;
+	struct trace_item *tr_IF1 = NO_OP;
 	
 	size_t size;
 	bool stall = false;
@@ -74,42 +77,8 @@ int main(int argc, char **argv) {
 
 		// exit, print if trace is on
 		if (trace_view_on) {
-			if (tr_WB != NULL) {
-				// printf("%s\n", "exit");
-				print_cycle(tr_WB, cycle_number);
-			}
-			// if (tr_MEM2 != NULL) {
-			// 	printf("%s\n", "tr_WB");
-			// 	print_cycle(tr_MEM2, cycle_number);
-			// }
-			// if (tr_MEM1 != NULL) {
-			// 	printf("%s\n", "tr_MEM2");
-			// 	print_cycle(tr_MEM1, cycle_number);
-			// }
-			// if (tr_EX2 != NULL) {
-			// 	printf("%s\n", "tr_MEM1");
-			// 	print_cycle(tr_EX2, cycle_number);
-			// }
-			// if (tr_EX1 != NULL) {
-			// 	printf("%s\n", "tr_EX2");
-			// 	print_cycle(tr_EX1, cycle_number);
-			// }
-			// if (tr_ID != NULL) {
-			// 	printf("%s\n", "tr_EX1");
-			// 	print_cycle(tr_ID, cycle_number);
-			// }
-			// if (tr_IF2 != NULL) {
-			// 	printf("%s\n", "tr_ID");
-			// 	print_cycle(tr_IF2, cycle_number);
-			// }
-			// if (tr_IF1 != NULL) {
-			// 	printf("%s\n", "tr_IF2");
-			// 	print_cycle(tr_IF1, cycle_number);
-			// }
-			// if (tr_entry != NULL) {
-			// 	printf("%s\n", "tr_IF1");
-			// 	print_cycle(tr_entry, cycle_number);
-			// }
+			// print_cycle(tr_WB, cycle_number);
+			print_pipeline(tr_entry, tr_IF1, tr_IF2, tr_ID, tr_EX1, tr_EX2, tr_MEM1, tr_MEM2, tr_WB, cycle_number);
 		}
 		if (!size && tr_WB->type == ti_DONE) {	 /* no more instructions (trace_items) to simulate */
 			printf("+ Simulation terminates at cycle : %u\n", cycle_number);
@@ -137,13 +106,14 @@ int main(int argc, char **argv) {
 			following cycle). A no-op is injected in EX1/EX2.
 		*/
 		// something will be in EX1, and the destination registers are the same
-		if (tr_EX1 != NULL && (tr_EX1->dReg == tr_ID->sReg_a || tr_EX1->dReg == tr_ID->sReg_b)) {
+		if (tr_EX1 != NULL && tr_EX1->dReg != 255 && (tr_EX1->dReg == tr_ID->sReg_a || tr_EX1->dReg == tr_ID->sReg_b)) {
 			// check that instruction writes to a register
 			switch(tr_EX1->type) {
 				case ti_RTYPE:
 				case ti_ITYPE:
 				case ti_LOAD:
 					tr_EX1 = NO_OP;
+					printf("DATA HAZARD a\n");
 					continue;
 			}
 		}
@@ -155,10 +125,11 @@ int main(int argc, char **argv) {
 			content of register X. A no-op is injected in EX1/EX2.
 		*/
 		// what was in EX2 has already moved into MEM1, so test that stage
-		if (tr_MEM1 != NULL) {
+		if (tr_MEM1 != NULL && tr_MEM1->dReg != 255) {
 			if(tr_MEM1->type == ti_LOAD) {
 				if( tr_MEM1->dReg == tr_ID->sReg_a || tr_MEM1->dReg == tr_ID->sReg_b) {
 					tr_EX1 = NO_OP;
+					printf("DATA HAZARD b\n");
 					continue;
 				}
 			}
@@ -172,10 +143,11 @@ int main(int argc, char **argv) {
 		cycle). A no-op is injected in EX1/EX2.
 		*/
 		// what was in MEM1 has already moved into MEM2, so test that stage
-		if (tr_MEM2 != NULL) {
+		if (tr_MEM2 != NULL && tr_MEM2->dReg != 255) {
 			if(tr_MEM2->type == ti_LOAD) {
 				if( tr_MEM2->dReg == tr_ID->sReg_a || tr_MEM2->dReg == tr_ID->sReg_b) {
 					tr_EX1 = NO_OP;
+					printf("DATA HAZARD c\n");
 					continue;
 				}
 			}
@@ -194,6 +166,7 @@ int main(int argc, char **argv) {
 				case ti_ITYPE:
 				case ti_LOAD:
 					tr_EX1 = NO_OP;
+					printf("STRUCTURAL HAZARD a\n");
 					continue;
 			}
 		}
@@ -215,32 +188,146 @@ int main(int argc, char **argv) {
 			}
 		}
 
-		// if ex2-if1 are branch
+		// if ex2 is a branch
 		if (tr_EX2 != NULL && tr_EX2->type == ti_BRANCH ) {
 			// determine if branch was taken
-
 			switch(branch_prediction_method) {
-				
-			}
-
-			// prediction: not taken
-			if(branch_prediction_method == 0) {
-				printf("branch_prediction_method = 0!\n");
-				// if branch was taken
-				// if (/* condition */) {
-				// 	// insert no-op at entry point
-				// }
-				// otherwise it's fine
-			}
-			// prediction: 1-bit branch-predictor
-			if(branch_prediction_method == 1) {
-				printf("branch_prediction_method = 1!\n");
-			}
-			// prediction: 2-bit branch-predictor
-			if(branch_prediction_method == 2) {
-				printf("branch_prediction_method = 2!\n");
+				case 0:
+					printf("branch_prediction_method = 0!\n");
+					if (tr_EX2->dReg == 1) {
+						// add no-op to front, start next cycle
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+					break;
+				case 1:
+					// prediction: 1-bit branch-predictor
+					// TODO
+					printf("branch_prediction_method = 1!\n");
+					break;
+				case 2:
+					// prediction: 2-bit branch-predictor 
+					// TODO
+					printf("branch_prediction_method = 2!\n");
+					break;
 			}
 		}
+
+		// if ex1 is a branch
+		if (tr_EX1 != NULL && tr_EX1->type == ti_BRANCH ) {
+			// determine if branch was taken
+			switch(branch_prediction_method) {
+				case 0:
+					printf("branch_prediction_method = 0!\n");
+					if (tr_EX1->dReg == 1) {
+						// add no-op to front, start next cycle
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+					break;
+				case 1:
+					// prediction: 1-bit branch-predictor
+					// TODO
+					printf("branch_prediction_method = 1!\n");
+					break;
+				case 2:
+					// prediction: 2-bit branch-predictor 
+					// TODO
+					printf("branch_prediction_method = 2!\n");
+					break;
+			}
+		}
+
+		// if id is a branch
+		if (tr_ID != NULL && tr_ID->type == ti_BRANCH ) {
+			// determine if branch was taken
+			switch(branch_prediction_method) {
+				case 0:
+					printf("branch_prediction_method = 0!\n");
+					if (tr_ID->dReg == 1) {
+						// add no-op to front, start next cycle
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+					break;
+				case 1:
+					// prediction: 1-bit branch-predictor
+					// TODO
+					printf("branch_prediction_method = 1!\n");
+					break;
+				case 2:
+					// prediction: 2-bit branch-predictor 
+					// TODO
+					printf("branch_prediction_method = 2!\n");
+					break;
+			}
+		}
+
+		// if IF2 is a branch
+		if (tr_IF2 != NULL && tr_IF2->type == ti_BRANCH ) {
+			// determine if branch was taken
+			switch(branch_prediction_method) {
+				case 0:
+					printf("branch_prediction_method = 0!\n");
+					if (tr_IF2->dReg == 1) {
+						// add no-op to front, start next cycle
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+					break;
+				case 1:
+					// prediction: 1-bit branch-predictor
+					// TODO
+					printf("branch_prediction_method = 1!\n");
+					break;
+				case 2:
+					// prediction: 2-bit branch-predictor 
+					// TODO
+					printf("branch_prediction_method = 2!\n");
+					break;
+			}
+		}
+
+		// if IF1 is a branch
+		if (tr_IF1 != NULL && tr_IF1->type == ti_BRANCH ) {
+			// determine if branch was taken
+			switch(branch_prediction_method) {
+				case 0:
+					printf("branch_prediction_method = 0!\n");
+					if (tr_IF1->dReg == 1) {
+						// add no-op to front, start next cycle
+						tr_IF1 = SQUASHED;
+						continue;
+					}
+					break;
+				case 1:
+					// prediction: 1-bit branch-predictor
+					// TODO
+					printf("branch_prediction_method = 1!\n");
+					break;
+				case 2:
+					// prediction: 2-bit branch-predictor 
+					// TODO
+					printf("branch_prediction_method = 2!\n");
+					break;
+			}
+		}
+
+			// // prediction: not taken
+			// if(branch_prediction_method == 0) {
+			// 	// if branch was taken
+			// 	// if (/* condition */) {
+			// 	// 	// insert no-op at entry point
+			// 	// }
+			// 	// otherwise it's fine
+			// }
+			// // prediction: 1-bit branch-predictor
+			// if(branch_prediction_method == 1) {
+			// 	printf("branch_prediction_method = 1!\n");
+			// }
+			// if(branch_prediction_method == 2) {
+			// 	printf("branch_prediction_method = 2!\n");
+			// }
 
 		// IF1
 		tr_IF1 = tr_entry;
