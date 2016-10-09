@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
 				case ti_ITYPE:
 				case ti_LOAD:
 					tr_EX1 = NO_OP;
-					printf("DATA HAZARD a\n");
+					if (trace_view_on) printf("DATA HAZARD a\n");
 					continue;
 			}
 		}
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
 			if(tr_MEM1->type == ti_LOAD) {
 				if( tr_MEM1->dReg == tr_ID->sReg_a || tr_MEM1->dReg == tr_ID->sReg_b) {
 					tr_EX1 = NO_OP;
-					printf("DATA HAZARD b\n");
+					if (trace_view_on) printf("DATA HAZARD b\n");
 					continue;
 				}
 			}
@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
 			if(tr_MEM2->type == ti_LOAD) {
 				if( tr_MEM2->dReg == tr_ID->sReg_a || tr_MEM2->dReg == tr_ID->sReg_b) {
 					tr_EX1 = NO_OP;
-					printf("DATA HAZARD c\n");
+					if (trace_view_on) printf("DATA HAZARD c\n");
 					continue;
 				}
 			}
@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
 				case ti_ITYPE:
 				case ti_LOAD:
 					tr_EX1 = NO_OP;
-					printf("STRUCTURAL HAZARD a\n");
+					if (trace_view_on) printf("STRUCTURAL HAZARD a\n");
 					continue;
 			}
 		}
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
 			// determine if branch was taken
 			switch(branch_prediction_method) {
 				case 0: // prediction: branch not taken
-					printf("branch_prediction_method = 0!\n");
+					if (trace_view_on) printf("branch_prediction_method = 0!\n");
 					if (tr_EX2->dReg == 1) {
 						// add no-op to front, start next cycle
 						tr_IF1 = SQUASHED;
@@ -202,8 +202,8 @@ int main(int argc, char **argv) {
 					}
 					break;
 				case 1: // prediction: 1-bit branch-predictor
-					printf("before branch update\n");
-					print_branch_table(branch_predict_table);
+					if (trace_view_on) printf("before branch update\n");
+					if (trace_view_on) print_branch_table(branch_predict_table);
 					// determine prediction
 					idx = get_hash(tr_EX2->PC);
 					prediction = 0; // default to not-taken
@@ -222,11 +222,11 @@ int main(int argc, char **argv) {
 						continue;
 					}
 
-					printf("branch_prediction_method = 1!\n");
+					if (trace_view_on) printf("branch_prediction_method = 1!\n");
 					break;
 				case 2: // prediction: 2-bit branch-predictor 
 					// determine prediction
-					print_branch_table(branch_predict_table);
+					if (trace_view_on) print_branch_table(branch_predict_table);
 					idx = get_hash(tr_EX2->PC);
 					prediction = 0; // default to not-taken
 					if (branch_predict_table[idx].tag == tr_EX2->PC) {
@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
 						tr_IF1 = SQUASHED;
 						continue;
 					}
-					printf("branch_prediction_method = 2!\n");
+					if (trace_view_on) printf("branch_prediction_method = 2!\n");
 					break;
 			}
 		}
@@ -292,7 +292,7 @@ int main(int argc, char **argv) {
 			// determine if branch was taken
 			switch(branch_prediction_method) {
 				case 0:
-					printf("branch_prediction_method = 0!\n");
+					if (trace_view_on) printf("branch_prediction_method = 0!\n");
 					if (tr_EX1->dReg == 1) {
 						// add no-op to front, start next cycle
 						tr_IF1 = SQUASHED;
@@ -313,7 +313,7 @@ int main(int argc, char **argv) {
 						tr_IF1 = SQUASHED;
 						continue;
 					}
-					printf("branch_prediction_method = 1!\n");
+					if (trace_view_on) printf("branch_prediction_method = 1!\n");
 					break;
 				case 2: // prediction: 2-bit branch-predictor 
 					// determine prediction
@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
 						tr_IF1 = SQUASHED;
 						continue;
 					}
-					printf("branch_prediction_method = 2!\n");
+					if (trace_view_on) printf("branch_prediction_method = 2!\n");
 					break;
 			}
 		}
@@ -348,7 +348,7 @@ int main(int argc, char **argv) {
 			// determine if branch was taken
 			switch(branch_prediction_method) {
 				case 0:
-					printf("branch_prediction_method = 0!\n");
+					if (trace_view_on) printf("branch_prediction_method = 0!\n");
 					if (tr_ID->dReg == 1) {
 						// add no-op to front, start next cycle
 						tr_IF1 = SQUASHED;
@@ -370,7 +370,7 @@ int main(int argc, char **argv) {
 						continue;
 					}
 
-					printf("branch_prediction_method = 1!\n");
+					if (trace_view_on) if (trace_view_on) printf("branch_prediction_method = 1!\n");
 					break;
 				case 2: // prediction: 2-bit branch-predictor 
 					// determine prediction
@@ -395,7 +395,7 @@ int main(int argc, char **argv) {
 						tr_IF1 = SQUASHED;
 						continue;
 					}
-					printf("branch_prediction_method = 2!\n");
+					if (trace_view_on) printf("branch_prediction_method = 2!\n");
 					break;
 			}
 		}
@@ -405,7 +405,7 @@ int main(int argc, char **argv) {
 			// determine if branch was taken
 			switch(branch_prediction_method) {
 				case 0:
-					printf("branch_prediction_method = 0!\n");
+					if (trace_view_on) printf("branch_prediction_method = 0!\n");
 					if (tr_IF2->dReg == 1) {
 						// add no-op to front, start next cycle
 						tr_IF1 = SQUASHED;
@@ -427,7 +427,7 @@ int main(int argc, char **argv) {
 						continue;
 					}
 
-					printf("branch_prediction_method = 1!\n");
+					if (trace_view_on) printf("branch_prediction_method = 1!\n");
 					break;
 				case 2: // prediction: 2-bit branch-predictor 
 					// determine prediction
@@ -452,7 +452,7 @@ int main(int argc, char **argv) {
 						tr_IF1 = SQUASHED;
 						continue;
 					}
-					printf("branch_prediction_method = 2!\n");
+					if (trace_view_on) printf("branch_prediction_method = 2!\n");
 					break;
 			}
 		}
@@ -462,7 +462,7 @@ int main(int argc, char **argv) {
 			// determine if branch was taken
 			switch(branch_prediction_method) {
 				case 0:
-					printf("branch_prediction_method = 0!\n");
+					if (trace_view_on) printf("branch_prediction_method = 0!\n");
 					if (tr_IF1->dReg == 1) {
 						// add no-op to front, start next cycle
 						tr_IF1 = SQUASHED;
@@ -483,7 +483,7 @@ int main(int argc, char **argv) {
 						tr_IF1 = SQUASHED;
 						continue;
 					}
-					printf("branch_prediction_method = 1!\n");
+					if (trace_view_on) printf("branch_prediction_method = 1!\n");
 					break;
 				case 2: // prediction: 2-bit branch-predictor 
 					// determine prediction
@@ -508,7 +508,7 @@ int main(int argc, char **argv) {
 						tr_IF1 = SQUASHED;
 						continue;
 					}
-					printf("branch_prediction_method = 2!\n");
+					if (trace_view_on) printf("branch_prediction_method = 2!\n");
 					break;
 			}
 		}
